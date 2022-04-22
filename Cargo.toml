@@ -1,0 +1,12 @@
+[package]
+name = "peerfs"
+version = "0.1.0"
+edition = "2021"
+description = "An experimental peer to peer filesystem."
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+mio = { version = "0.8", features = ["net", "os-poll"] }
+# rtnetlink = "0.9.1"
+byteorder = "1.4"
