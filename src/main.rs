@@ -1,14 +1,12 @@
 use std::net::{IpAddr, Ipv4Addr};
 use std::time::Instant;
-use std::env;
 
 use peerfs::host::HostPeer;
-use peerfs::pfs::PartialFile;
 
 
 fn main() {
 
-    const PARTIAL_FILE_TEST: &str = "C:/Users/theor/Downloads/partial_file_test";
+    /*const PARTIAL_FILE_TEST: &str = "C:/Users/theor/Downloads/partial_file_test";
 
     {
         let pf = PartialFile::create(PARTIAL_FILE_TEST, 123456).unwrap();
@@ -18,11 +16,11 @@ fn main() {
     {
         let pf = PartialFile::open(PARTIAL_FILE_TEST).unwrap();
         println!("{:?}", pf);
-    }
+    }*/
 
-    /*let mut peer0 = HostPeer::new(17127).unwrap();
-    let mut peer1 = HostPeer::new(17128).unwrap();
-    let mut peer2 = HostPeer::new(17129).unwrap();
+    let mut peer0 = HostPeer::new(17127, r"D:\MainStorage\Theo\Downloads\test_shared0").unwrap();
+    let mut peer1 = HostPeer::new(17128, r"D:\MainStorage\Theo\Downloads\test_shared1").unwrap();
+    let mut peer2 = HostPeer::new(17129, r"D:\MainStorage\Theo\Downloads\test_shared2").unwrap();
 
     // Only peer1 know the other peer.
     peer1.add_peer(IpAddr::V4(Ipv4Addr::LOCALHOST), 17127);
@@ -41,6 +39,6 @@ fn main() {
 
     println!("[17127] {:?}", peer0.get_peers());
     println!("[17128] {:?}", peer1.get_peers());
-    println!("[17129] {:?}", peer2.get_peers());*/
+    println!("[17129] {:?}", peer2.get_peers());
 
 }

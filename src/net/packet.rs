@@ -2,9 +2,8 @@
 //! All peers must implement this protocol and are on the same level,
 //! there is no notion of host and client.
 
+use std::io::{self, ErrorKind, Read, Write};
 use std::net::{Ipv4Addr, Ipv6Addr, IpAddr};
-use std::io::{ErrorKind, Read, Write};
-use std::io;
 
 use byteorder::{ReadBytesExt, WriteBytesExt, BE};
 
@@ -131,6 +130,12 @@ impl Packet {
                 let port = read.read_u16::<BE>()?;
                 Ok(Packet::PeerDiscover { addr, port })
             }
+            ID_FILE_OPEN => {
+                let request_id = read.read_u64::<BE>()?;
+                let channel_handle = read.read_u64::<BE>()?;
+                let path = read.read_str()?;
+                Ok(Packet::FileOpen { request_id, channel_handle, path })
+            }
             _ => Err(ErrorKind::InvalidData.into())
         }
 
@@ -159,6 +164,12 @@ impl Packet {
                 }
                 write.write_u16::<BE>(*port)?;
             }
+            Packet::FileOpen { request_id, channel_handle, path } => {
+                write.write_u8(ID_FILE_OPEN)?;
+                write.write_u64::<BE>(*request_id)?;
+                write.write_u64::<BE>(*channel_handle)?;
+                write.write_str(path)?;
+            }
             _ => unimplemented!()
         }
 
@@ -167,3 +178,30 @@ impl Packet {
     }
 
 }
+
+trait PacketReadExt: Read {
+
+    fn read_str(&mut self) -> io::Result<String> {
+        let len = self.read_u32::<BE>()?;
+        let mut data = vec![0; len as usize];
+        self.read_exact(&mut data[..])?;
+        match String::from_utf8(data) {
+            Ok(s) => Ok(s),
+            Err(_) => Err(io::ErrorKind::InvalidData.into())
+        }
+    }
+
+}
+
+trait PacketWriteExt: Write {
+
+    fn write_str<S: AsRef<str>>(&mut self, s: S) -> io::Result<()> {
+        let s = s.as_ref();
+        self.write_u32::<BE>(s.len() as u32)?;
+        self.write_all(s.as_bytes())
+    }
+
+}
+
+impl<T: Read> PacketReadExt for T {}
+impl<T: Write> PacketWriteExt for T {}

@@ -3,6 +3,7 @@ use std::collections::hash_map::Entry;
 use std::time::{Duration, Instant};
 use std::collections::HashMap;
 use std::cell::RefCell;
+use std::path::Path;
 use std::rc::Rc;
 use std::fmt;
 use std::io;
@@ -10,7 +11,8 @@ use std::io;
 use mio::net::{TcpListener, TcpStream};
 use mio::{Poll, Events, Token, Interest, Registry};
 
-use crate::proto::Packet;
+use crate::net::packet::Packet;
+use crate::pfs::PartialFileSystem;
 
 
 const TOK_SERVER_READY: Token = Token(0);
@@ -28,6 +30,9 @@ pub struct HostPeer {
     /// Peers available to this peer.
     peers: Peers,
 
+    /// Temporary testing pfs.
+    pfs: PartialFileSystem,
+
     poll: Poll,
     events: Events,
 }
@@ -35,7 +40,7 @@ pub struct HostPeer {
 impl HostPeer {
 
     /// Creates a new Peer.
-    pub fn new(port: u16) -> io::Result<Self> {
+    pub fn new<P: AsRef<Path>>(port: u16, pfs_path: P) -> io::Result<Self> {
 
         let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port);
         let mut tcp_listener = TcpListener::bind(addr).unwrap();
@@ -48,6 +53,7 @@ impl HostPeer {
             server_port: port,
             linked_peers: LinkedPeers::new(),
             peers: Peers::new(),
+            pfs: PartialFileSystem::new(pfs_path).unwrap(),
             poll,
             events: Events::with_capacity(1024)
         })
@@ -144,6 +150,9 @@ impl HostPeer {
                                     }
                                     Packet::PeerDiscover { addr, port } => {
                                         self.peers.add(addr, port, PeerStatus::Unlinked);
+                                    }
+                                    Packet::FileOpen { request_id, channel_handle: _, path } => {
+                                        self.pfs.open(path)
                                     }
                                     _ => {}
                                 }

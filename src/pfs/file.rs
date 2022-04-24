@@ -49,22 +49,32 @@ impl PartialFile {
         let size = file.read_u64::<LE>()?;
 
         let partial = size + footer_length == file_len;
-
-        let size = if partial { size } else { file_len };
-
         let partial_blocks = if partial {
+
             // If we guessed that this file is partially filled, parse ranges.
             let mut ranges = RangeVec::new();
             let ranges_count = file.read_u64::<LE>()?;
-            for _ in 0..ranges_count {
-                let from = file.read_u64::<LE>()?;
-                let to = file.read_u64::<LE>()?;
-                ranges.push(from, to);
+
+            // Test if the remaining header length is strictly equal to the
+            // expected length for ranges.
+            let expected_ranges_size = ranges_count * 16;
+            let actual_ranges_size = footer_length - 24; // -(file_size + header_size + ranges_count)
+            if expected_ranges_size != actual_ranges_size {
+                for _ in 0..ranges_count {
+                    let from = file.read_u64::<LE>()?;
+                    let to = file.read_u64::<LE>()?;
+                    ranges.push(from, to);
+                }
+                Some(ranges)
+            } else {
+                None
             }
-            Some(ranges)
+
         } else {
             None
         };
+
+        let size = if partial_blocks.is_some() { size } else { file_len };
 
         Ok(PartialFile {
             file,
