@@ -8,5 +8,5 @@ description = "An experimental peer to peer filesystem."
 
 [dependencies]
 mio = { version = "0.8", features = ["net", "os-poll"] }
-# rtnetlink = "0.9.1"
+crossbeam-channel = "0.5"
 byteorder = "1.4"

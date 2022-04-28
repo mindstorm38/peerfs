@@ -2,6 +2,9 @@
 //! All peers must implement this protocol and are on the same level,
 //! there is no notion of host and client.
 
+// IDEA: Move this to the 'crate::host' module, and create a generalized 'Packet'
+// trait to use for endpoint.
+
 use std::io::{self, ErrorKind, Read, Write};
 use std::net::{Ipv4Addr, Ipv6Addr, IpAddr};
 

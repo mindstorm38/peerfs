@@ -136,7 +136,7 @@ where
     }
 
     pub fn contains(&self, value: T) -> bool {
-        self.data.binary_search_by(|&(item_from, item_to)| {
+        self.data.binary_search_by(move |&(item_from, item_to)| {
             if value < item_from {
                 Ordering::Greater
             } else if value >= item_to {

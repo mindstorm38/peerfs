@@ -8,11 +8,12 @@ use std::io::{self};
 
 
 mod file;
+
 pub use file::*;
 
 
 
-/// A partial filesystem view, used to store partial files and manage handles to them.
+/*/// A partial filesystem view, used to store partial files and manage handles to them.
 pub struct PartialFileSystem {
     root: PathBuf,
     files: HashMap<u64, PartialFile>,
@@ -59,3 +60,4 @@ impl PartialFileSystem {
     }
 
 }
+*/

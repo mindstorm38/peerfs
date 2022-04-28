@@ -1,32 +1,39 @@
 //!
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
 use std::time::Instant;
 use std::path::Path;
-use std::io::{self};
-use std::rc::Rc;
+use std::io::{self, Read, BufRead, Write};
 use std::fmt;
+
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
+
+use std::sync::{Arc, Mutex, MutexGuard};
+use std::thread::{self, JoinHandle};
+use std::rc::Rc;
 
 use mio::net::TcpStream;
 
+use crossbeam_channel::{Sender, Receiver};
+
 use crate::net::endpoint::{Endpoint, EndpointEvent, EndpointEvents, Link};
 use crate::net::packet::Packet;
-use crate::pfs::PartialFileSystem;
+
+use crate::pfs::{PartialFile, PartialFiller};
+
+
+pub mod file;
 
 
 pub struct HostPeer {
+    /// Shared values between host loop and host, to avoid passing these huge
+    /// structure through the channel. Channel is only used for small commands.
+    shared_peers: Arc<Mutex<Peers>>,
     /// TODO
-    endpoint: Endpoint,
-    /// TODO
-    endpoint_events: EndpointEvents,
-    /// TODO
-    endpoint_port: u16,
-    /// Peers available to this peer.
-    peers: Peers,
+    command_sender: Sender<LoopCommand>,
     /// Temporary testing pfs.
-    pfs: PartialFileSystem,
+    pfs: PeerFileSystem,
 }
 
 impl HostPeer {
@@ -35,28 +42,84 @@ impl HostPeer {
 
         let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port);
 
-        Ok(Self {
+        let shared_peers = Arc::new(Mutex::new(Peers::new()));
+
+        let loop_ = Loop {
             endpoint: Endpoint::new(addr)?,
             endpoint_events: EndpointEvents::new(),
             endpoint_port: port,
-            peers: Peers::new(),
-            pfs: PartialFileSystem::new(pfs_path)?,
+            shared_peers: Arc::clone(&shared_peers),
+        };
+
+        /*thread::Builder::new()
+            .name("".to_string())
+            .spawn(move || loop_.tick_loop())?;*/
+
+        Ok(Self {
+            shared_peers,
+            //pfs: PartialFileSystem::new(pfs_path)?,
         })
 
     }
 
-    pub fn get_peers(&self) -> &Peers {
-        &self.peers
+    pub fn get_peers(&self) -> MutexGuard<Peers> {
+        self.shared_peers.lock().expect("host loop panicked")
     }
 
     /// Manually add a known peer that can be used for filesystem exchange.
-    pub fn add_peer(&mut self, addr: IpAddr, port: u16) {
-        self.peers.add(addr, port, PeerStatus::Undefined);
+    pub fn add_peer(&self, addr: IpAddr, port: u16) {
+        self.get_peers().add(addr, port, PeerStatus::Undefined);
     }
 
-    pub fn tick(&mut self) -> io::Result<()> {
+    pub fn test(&self) {
 
-        self.peers.process_undefined_peers(|peer| {
+    }
+
+    /*pub fn open_file<P: AsRef<Path>>(&mut self, path: P) -> io::Result<PeerFile> {
+
+    }*/
+
+}
+
+
+enum LoopCommand {
+
+}
+
+
+/// Internal threaded loop.
+struct Loop {
+    /// TODO
+    endpoint: Endpoint,
+    /// TODO
+    endpoint_events: EndpointEvents,
+    /// TODO
+    endpoint_port: u16,
+    /// Shared values between host loop and host, to avoid passing these huge
+    /// structure through the channel. Channel is only used for small commands.
+    shared_peers: Arc<Mutex<Peers>>,
+    /// TODO
+    command_receiver: Receiver<LoopCommand>,
+    /// List of cached peer files.
+    cached_files: HashMap<u64, PeerFile>
+}
+
+impl Loop {
+
+    fn tick_loop(mut self) {
+        loop {
+            if let Err(e) = self.tick() {
+                eprintln!("Failed to tick inner")
+            }
+        }
+    }
+
+    fn tick(&mut self) -> io::Result<()> {
+
+        let mut peers = self.shared_peers.lock()
+            .expect("host thread panicked");
+
+        peers.process_undefined_peers(|peer| {
             let peer_addr = peer.new_socket_addr();
             if let Ok(link) = self.endpoint.add_link_to(peer_addr) {
                 link.send(&Packet::PeerIdentify { port: self.endpoint_port }).unwrap();
@@ -86,7 +149,7 @@ impl HostPeer {
                                 port: *port
                             };
 
-                            for peer in self.peers.iter() {
+                            for peer in peers.iter() {
 
                                 // We send this to the peer that sends us 'PeerIdentify'.
                                 link.send(&Packet::PeerDiscover {
@@ -101,11 +164,11 @@ impl HostPeer {
 
                             }
 
-                            self.peers.add(addr.ip(), *port, PeerStatus::Linked(Rc::clone(link)));
+                            peers.add(addr.ip(), *port, PeerStatus::Linked(Rc::clone(link)));
 
                         }
                         Packet::PeerDiscover { addr, port } => {
-                            self.peers.add(*addr, *port, PeerStatus::Unlinked);
+                            peers.add(*addr, *port, PeerStatus::Unlinked);
                         }
                         _ => {}
                     }
@@ -183,6 +246,7 @@ impl Peers {
     }
 
 }
+
 
 /// Internally used to track state of a remote peers.
 #[derive(Debug)]
@@ -264,5 +328,36 @@ impl fmt::Debug for PeerStatus {
             PeerStatus::Unlinked => f.write_str("Unlinked"),
             PeerStatus::Linked(_) => f.write_str("Linked")
         }
+    }
+}
+
+
+struct PeerFileSystem {
+    cache: HashMap<u64, Arc<Mutex<PeerFile>>>
+}
+
+impl PeerFileSystem {
+
+    pub fn open_file(&self) -> io::Result<MutexGuard<PeerFile>> {
+        todo!()
+    }
+
+}
+
+
+pub struct PeerFile {
+    /// The host peer managing the connection.
+    file: PartialFile<PeerFileFiller>
+}
+
+struct PeerFileFiller<'a> {
+    host: &'a HostPeer,
+}
+
+impl<'a> PartialFiller for PeerFileFiller<'a> {
+    fn provide<W: Write>(&self, block_index: u64, block_len: usize, dest: W) -> io::Result<()> {
+
+        todo!()
+
     }
 }

@@ -28,14 +28,14 @@ fn main() {
 
     let start = Instant::now();
 
-    loop {
+    /*loop {
         peer0.tick();
         peer1.tick();
         peer2.tick();
         if start.elapsed().as_secs() > 2 {
             break;
         }
-    }
+    }*/
 
     println!("[17127] {:?}", peer0.get_peers());
     println!("[17128] {:?}", peer1.get_peers());
